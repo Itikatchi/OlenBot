@@ -1,15 +1,19 @@
 
 require("dotenv").config();
+const { currentMonth } = require("./src/utils/dates");
+
+const { getAgendaMessages } = require("./src/database/agenda.repository");
 
 const {
   Client,
   GatewayIntentBits,
   REST,
-  Routes 
+  Routes
 } = require("discord.js");
 
 const { syncIcal } = require("./src/services/ical.service");
 const { startScheduler } = require("./src/services/scheduler");
+const { calendarMessage } = require("./src/discord/messages");
 const { commands } = require("./src/discord/commands");
 const { registerInteractions } = require("./src/discord/interactions");
 const { createPublicCalendarRefresher } = require("./src/discord/public-calendar");

@@ -39,10 +39,8 @@ client.on(
             return;
           }
           
-          const previousCourse = previousCourseDate(date);
-
           const selected =
-            action === "prev" ? previousCourse :
+            action === "prev" ? previousCourseDate(date) :
             action === "next" ? nextCourseDate(date) :
             action === "today" ? currentDate() :
             action === "tomorrow" ? nextCourseDate(currentDate()) :
@@ -219,11 +217,13 @@ client.on(
             );
 
           } catch (error) {
+            if (error.code !== 10008) {
+              throw error;
+            }
 
             console.log(
               "Ancien calendrier introuvable, création d'un nouveau."
             );
-
           }
 
         }
