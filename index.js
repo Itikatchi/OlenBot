@@ -1,5 +1,39 @@
 
 require("dotenv").config();
+const {
+  CONFIG,
+  GROUPS,
+  TYPES,
+  COLORS,
+  LABELS,
+  GROUP_LABELS
+} = require("./src/config");
+
+const {
+  validDate,
+  currentMonth,
+  currentDate,
+  parisDateTime,
+  addDays,
+  tomorrow
+} = require("./src/utils/dates");
+
+const {
+  coursesFor,
+  nextCourseDate,
+  previousCourseDate,
+  replaceCourses
+} = require("./src/database/courses.repository");
+
+const {
+  getEvents,
+  listEvents,
+  addEvent,
+  deleteEvent,
+  getAgendaMessages,
+  getAgendaMessage,
+  saveAgendaMessage
+} = require("./src/database/agenda.repository");
 
 const {
   Client,
@@ -16,7 +50,6 @@ const {
   MessageFlags
 } = require("discord.js");
 
-const Database = require("better-sqlite3");
 const { createCanvas, GlobalFonts } = require("@napi-rs/canvas");
 const path = require("node:path");
 const ICAL = require("ical.js");
@@ -25,18 +58,27 @@ const cron = require("node-cron");
 // CONFIGURATION
 // =====================================================
 
-const CONFIG = {
-  timezone: "Europe/Paris",
-  width: 1680,
-  height: 880,
-  background: "#20232B"
-};
+const FONT_REGULAR = path.join(
+  __dirname,
+  "assets",
+  "fonts",
+  "DejaVuSans.ttf"
+);
 
-const FONT_REGULAR =
-  "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+const FONT_BOLD = path.join(
+  __dirname,
+  "assets",
+  "fonts",
+  "DejaVuSans-Bold.ttf"
+);
 
-const FONT_BOLD =
-  "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+const fs = require("node:fs");
+
+console.log("Police normale :", FONT_REGULAR);
+console.log("Existe :", fs.existsSync(FONT_REGULAR));
+
+console.log("Police grasse :", FONT_BOLD);
+console.log("Existe :", fs.existsSync(FONT_BOLD));
 
 const regularLoaded = GlobalFonts.registerFromPath(
   FONT_REGULAR,
@@ -67,79 +109,6 @@ const rest = new REST({
   version: "10"
 }).setToken(process.env.DISCORD_TOKEN);
 
-// =====================================================
-// BASE DE DONNÉES
-// =====================================================
-
-const db = new Database(
-  path.join(__dirname, "agenda.db")
-);
-
-db.pragma("journal_mode = WAL");
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    groupe TEXT NOT NULL,
-    type TEXT NOT NULL,
-    debut TEXT NOT NULL,
-    fin TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT ''
-  );
-
-  CREATE TABLE IF NOT EXISTS agenda_messages (
-    channel_id TEXT PRIMARY KEY,
-    message_id TEXT NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS courses (
-    uid TEXT PRIMARY KEY,
-    date TEXT NOT NULL,
-    start_at TEXT NOT NULL,
-    end_at TEXT NOT NULL,
-    title TEXT NOT NULL,
-    location TEXT NOT NULL DEFAULT '',
-    class_name TEXT NOT NULL DEFAULT ''
-  );
-`);
-
-// =====================================================
-// GROUPES ET COULEURS
-// =====================================================
-
-const GROUPS = [
-  "alternance",
-  "initiale"
-];
-
-const TYPES = [
-  "cours",
-  "entreprise",
-  "vacances",
-  "examen",
-  "ferie"
-];
-
-const COLORS = {
-  cours: "#FFF4A3",
-  entreprise: "#B5F5FF",
-  vacances: "#E5AA43",
-  examen: "#D75C75",
-  ferie: "#FF8080"
-};
-
-const LABELS = {
-  cours: "ÉCOLE",
-  entreprise: "ENTREPRISE",
-  vacances: "VACANCES",
-  examen: "EXAMEN",
-  ferie: "FÉRIÉ"
-};
-
-const GROUP_LABELS = {
-  alternance: "Alternance",
-  initiale: "Formation initiale"
-};
 
 // =====================================================
 // COMMANDES DISCORD
@@ -246,143 +215,10 @@ function isAdmin(interaction) {
     : Boolean(roles?.cache?.has(adminRoleId));
 }
 
-// =====================================================
-// DATES
-// =====================================================
 
-function validDate(value) {
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-
-  const date = new Date(value + "T12:00:00Z");
-
-  return (
-    !Number.isNaN(date.getTime()) &&
-    date.toISOString().slice(0, 10) === value
-  );
-}
-
-function currentMonth() {
-
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: CONFIG.timezone,
-    year: "numeric",
-    month: "numeric"
-  }).formatToParts(new Date());
-
-  const get = type =>
-    Number(
-      parts.find(part => part.type === type).value
-    );
-
-  return {
-    year: get("year"),
-    month: get("month") - 1
-  };
-}
-
-function currentDate() {
-
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: CONFIG.timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date());
-
-  const get = type =>
-    parts.find(part => part.type === type).value;
-
-  return [
-    get("year"),
-    get("month"),
-    get("day")
-  ].join("-");
-}
-
-// =====================================================
-// RÉCUPÉRATION DES ÉVÉNEMENTS
-// =====================================================
-
-function getEvents(group, year, month) {
-
-  const start = [
-    year,
-    String(month + 1).padStart(2, "0"),
-    "01"
-  ].join("-");
-
-  const next = new Date(
-    Date.UTC(year, month + 1, 1)
-  ).toISOString().slice(0, 10);
-
-  return db.prepare(`
-    SELECT *
-    FROM events
-    WHERE groupe = ?
-      AND debut < ?
-      AND fin >= ?
-    ORDER BY debut, id
-  `).all(group, next, start);
-}
 // =====================================================
 // IMPORT ICALENDAR
 // =====================================================
-
-function parisDateTime(date) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Paris",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23"
-  }).formatToParts(date);
-
-  const get = type =>
-    parts.find(part => part.type === type).value;
-
-  return {
-    date: `${get("year")}-${get("month")}-${get("day")}`,
-    time: `${get("hour")}:${get("minute")}`
-  };
-}
-
-function addDays(date, amount) {
-  const value = new Date(`${date}T12:00:00Z`);
-  value.setUTCDate(value.getUTCDate() + amount);
-  return value.toISOString().slice(0, 10);
-}
-
-function tomorrow() {
-  return addDays(currentDate(), 1);
-}
-
-function coursesFor(date) {
-  return db.prepare(`
-    SELECT *
-    FROM courses
-    WHERE date = ?
-    ORDER BY start_at, uid
-  `).all(date);
-}
-
-function nextCourseDate(fromDate, includeToday = false) {
-  const startDate = includeToday
-    ? fromDate
-    : addDays(fromDate, 1);
-
-  const next = db.prepare(`
-    SELECT MIN(date) AS date
-    FROM courses
-    WHERE date >= ?
-  `).get(startDate);
-
-  return next?.date || startDate;
-}
 
 let syncInProgress = false;
 
@@ -470,40 +306,8 @@ async function syncIcal() {
         "anciens cours conservés."
       );
     }
-
-    const upsert = db.prepare(`
-      INSERT INTO courses (
-        uid, date, start_at, end_at,
-        title, location, class_name
-      )
-      VALUES (
-        @uid, @date, @start_at, @end_at,
-        @title, @location, @class_name
-      )
-      ON CONFLICT(uid) DO UPDATE SET
-        date = excluded.date,
-        start_at = excluded.start_at,
-        end_at = excluded.end_at,
-        title = excluded.title,
-        location = excluded.location,
-        class_name = excluded.class_name
-    `);
-
-    const remove = db.prepare(`
-      DELETE FROM courses WHERE uid = ?
-    `);
-
-    db.transaction(() => {
-      for (const record of records.values()) {
-        upsert.run(record);
-      }
-
-      for (const row of db.prepare("SELECT uid FROM courses").all()) {
-        if (!records.has(row.uid)) {
-          remove.run(row.uid);
-        }
-      }
-    })();
+    
+    replaceCourses(records);
 
     console.log(
       `iCalendar : ${records.size} cours synchronisés.`
@@ -978,10 +782,7 @@ function calendarImage(group, year, month, selectedDate = nextCourseDate(current
 
 async function refreshPublicCalendars() {
 
-  const messages = db.prepare(`
-    SELECT *
-    FROM agenda_messages
-  `).all();
+  const messages = getAgendaMessages();
 
   const { year, month } = currentMonth();
 
@@ -1046,13 +847,9 @@ client.on(
           if (!GROUPS.includes(group) || !validDate(date)) {
             return;
           }
-
-          const previousCourse = db.prepare(`
-            SELECT MAX(date) AS date
-            FROM courses
-            WHERE date < ?
-          `).get(date)?.date;
           
+          const previousCourse = previousCourseDate(date);
+
           const selected =
             action === "prev" ? previousCourse :
             action === "next" ? nextCourseDate(date) :
@@ -1204,11 +1001,7 @@ client.on(
           flags: MessageFlags.Ephemeral
         });
 
-        const existing = db.prepare(`
-          SELECT *
-          FROM agenda_messages
-          WHERE channel_id = ?
-        `).get(interaction.channelId);
+        const existing = getAgendaMessage(interaction.channelId);
 
         // Si un calendrier existe déjà, on le modifie
 
@@ -1256,14 +1049,7 @@ client.on(
             )
           );
 
-        db.prepare(`
-          INSERT INTO agenda_messages
-          (channel_id, message_id)
-          VALUES (?, ?)
-          ON CONFLICT(channel_id)
-          DO UPDATE SET
-          message_id = excluded.message_id
-        `).run(
+        saveAgendaMessage(
           interaction.channelId,
           message.id
         );
@@ -1286,12 +1072,7 @@ client.on(
           });
         }
 
-        const events = db.prepare(`
-          SELECT *
-          FROM events
-          ORDER BY debut DESC, id DESC
-          LIMIT 20
-        `).all();
+        const events = listEvents();
 
         const text = events.map(event =>
           `#${event.id} | ${event.groupe} | ` +
@@ -1360,11 +1141,7 @@ client.on(
 
         }
 
-        const result = db.prepare(`
-          INSERT INTO events
-          (groupe, type, debut, fin, description)
-          VALUES (?, ?, ?, ?, ?)
-        `).run(
+        const result = addEvent(
           groupe,
           type,
           debut,
@@ -1392,10 +1169,7 @@ client.on(
         const id =
           interaction.options.getInteger("id");
 
-        const result = db.prepare(`
-          DELETE FROM events
-          WHERE id = ?
-        `).run(id);
+        const result = deleteEvent(id);
 
         await interaction.reply({
           content: result.changes
