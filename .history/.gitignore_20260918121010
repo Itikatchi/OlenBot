@@ -1,8 +1,8 @@
 # Dépendances Node.js
 node_modules/
 
-history/
 
+.history
 # Secrets et configuration locale
 .env
 .env.*
