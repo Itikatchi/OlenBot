@@ -50,10 +50,11 @@ const {
   MessageFlags
 } = require("discord.js");
 
+const { syncIcal } = require("./src/services/ical.service");
+const { startScheduler } = require("./src/services/scheduler");
 const { createCanvas, GlobalFonts } = require("@napi-rs/canvas");
 const path = require("node:path");
-const ICAL = require("ical.js");
-const cron = require("node-cron");
+
 // =====================================================
 // CONFIGURATION
 // =====================================================
@@ -215,110 +216,6 @@ function isAdmin(interaction) {
     : Boolean(roles?.cache?.has(adminRoleId));
 }
 
-
-// =====================================================
-// IMPORT ICALENDAR
-// =====================================================
-
-let syncInProgress = false;
-
-async function syncIcal() {
-  if (syncInProgress) {
-    return;
-  }
-
-  if (!process.env.ICAL_URL) {
-    throw new Error("ICAL_URL manque dans .env");
-  }
-
-  syncInProgress = true;
-
-  try {
-    const response = await fetch(process.env.ICAL_URL, {
-      signal: AbortSignal.timeout(25000)
-    });
-
-    if (!response.ok) {
-      throw new Error(`Erreur Ymag : HTTP ${response.status}`);
-    }
-
-    const content = await response.text();
-
-    if (!content.includes("BEGIN:VCALENDAR")) {
-      throw new Error("Le portail n'a pas renvoyé un calendrier.");
-    }
-
-    const calendar = new ICAL.Component(
-      ICAL.parse(content)
-    );
-
-    const events = calendar.getAllSubcomponents("vevent");
-
-    if (!events.length) {
-      throw new Error("Export vide : anciens cours conservés.");
-    }
-
-    const records = new Map();
-    let unsupportedRecurrences = 0;
-
-    for (const component of events) {
-      const event = new ICAL.Event(component);
-
-      if (!event.uid || !event.startDate || !event.endDate) {
-        continue;
-      }
-
-      const className = event.description || "";
-
-      if (
-        process.env.ICAL_CLASS_FILTER &&
-        !className.includes(process.env.ICAL_CLASS_FILTER)
-      ) {
-        continue;
-      }
-
-      if (
-        component.hasProperty("rrule") ||
-        component.hasProperty("rdate") ||
-        component.hasProperty("recurrence-id")
-      ) {
-        unsupportedRecurrences++;
-        continue;
-      }
-
-      const start = parisDateTime(event.startDate.toJSDate());
-      const end = parisDateTime(event.endDate.toJSDate());
-
-      records.set(event.uid, {
-        uid: event.uid,
-        date: start.date,
-        start_at: start.time,
-        end_at: end.time,
-        title: event.summary || "Cours",
-        location: event.location || "",
-        class_name: className
-      });
-    }
-
-    if (!records.size || unsupportedRecurrences) {
-      throw new Error(
-        "Export sans cours exploitables ou avec récurrences : " +
-        "anciens cours conservés."
-      );
-    }
-    
-    replaceCourses(records);
-
-    console.log(
-      `iCalendar : ${records.size} cours synchronisés.`
-    );
-
-    return records.size;
-
-  } finally {
-    syncInProgress = false;
-  }
-}
 // =====================================================
 // GÉNÉRATION DU CALENDRIER
 // =====================================================
@@ -1279,35 +1176,11 @@ async function start() {
     }
   }
 
-  // Synchronisation quotidienne à 20 h, heure de Paris
-  cron.schedule("0 20 * * *", async () => {
-    try {
-      await syncIcal();
-      await refreshPublicCalendars();
-    } catch (error) {
-      console.error("Synchronisation de 20 h :", error.message);
-    }
-  }, {
-    timezone: "Europe/Paris",
-    noOverlap: true
-  });
-  
   // Actualisation au démarrage
-
   await refreshPublicCalendars();
 
-  // Actualisation périodique
-  // Permet notamment de passer au mois suivant.
-
-  setInterval(
-    () => {
-      refreshPublicCalendars().catch(
-        console.error
-      );
-    },
-    60 * 60 * 1000
-  );
-
+  // Démarrage des tâches automatiques
+  startScheduler(refreshPublicCalendars);
 }
 
 start().catch(console.error);
