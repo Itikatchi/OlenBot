@@ -41,18 +41,13 @@ const {
   REST,
   Routes,
   SlashCommandBuilder,
-  PermissionFlagsBits,
-  AttachmentBuilder,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   MessageFlags
 } = require("discord.js");
 
 const { syncIcal } = require("./src/services/ical.service");
 const { startScheduler } = require("./src/services/scheduler");
 const { calendarImage } = require("./src/calendar/renderer");
+const { calendarMessage } = require("./src/discord/messages");
 
 // =====================================================
 // DISCORD
@@ -170,109 +165,6 @@ function isAdmin(interaction) {
   return Array.isArray(roles)
     ? roles.includes(adminRoleId)
     : Boolean(roles?.cache?.has(adminRoleId));
-}
-
-// =====================================================
-// MESSAGE DISCORD
-// =====================================================
-
-  function calendarMessage(
-    group,
-    year,
-    month,
-    publicView = false,
-    selectedDate = nextCourseDate(currentDate())
-  ) {
-
-  const image = calendarImage(
-    group,
-    year,
-    month,
-    selectedDate
-  );
-
-  const attachment = new AttachmentBuilder(
-    image,
-    {
-      name: "agenda.png"
-    }
-  );
-
-  const embed = new EmbedBuilder()
-
-    .setTitle("Agenda de la classe")
-
-    .setDescription(
-      `Planning : ${GROUP_LABELS[group]}`
-    )
-
-    .setColor("#5865F2")
-
-    .setImage("attachment://agenda.png");
-
-  const buttons = new ActionRowBuilder()
-    .addComponents(
-
-      new ButtonBuilder()
-        .setCustomId(
-          `cal:prev:${group}:${year}:${month}`
-        )
-        .setLabel("← Mois")
-        .setStyle(ButtonStyle.Secondary),
-
-      new ButtonBuilder()
-        .setCustomId(
-          `cal:switch:${group}:${year}:${month}`
-        )
-        .setLabel(
-          group === "alternance"
-            ? "Formation initiale"
-            : "Alternance"
-        )
-        .setStyle(ButtonStyle.Primary),
-
-      new ButtonBuilder()
-        .setCustomId(
-          `cal:next:${group}:${year}:${month}`
-        )
-        .setLabel("Mois →")
-        .setStyle(ButtonStyle.Secondary)
-
-    );
-
-    const dayButtons = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`day:prev:${group}:${selectedDate}`)
-        .setLabel("← Cours")
-        .setStyle(ButtonStyle.Secondary),
-    
-      new ButtonBuilder()
-        .setCustomId(`day:today:${group}:${selectedDate}`)
-        .setLabel("Aujourd'hui")
-        .setStyle(ButtonStyle.Secondary),
-    
-      new ButtonBuilder()
-        .setCustomId(`day:tomorrow:${group}:${selectedDate}`)
-        .setLabel("Prochain cours")
-        .setStyle(ButtonStyle.Primary),
-    
-      new ButtonBuilder()
-        .setCustomId(`day:next:${group}:${selectedDate}`)
-        .setLabel("Cours →")
-        .setStyle(ButtonStyle.Secondary)
-    );
-
-  return {
-    embeds: [embed],
-    files: [attachment],
-    components: [buttons, dayButtons],
-
-    ...(publicView
-      ? {}
-      : {
-          flags: MessageFlags.Ephemeral
-        })
-  };
 }
 
 // =====================================================
