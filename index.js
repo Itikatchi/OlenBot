@@ -86,7 +86,7 @@ async function start() {
   );
 
   // Import initial
-  if (process.env.ICAL_URL) {
+  if (process.env.ICAL_URL || process.env.ICAL_4EADL_URL || process.env.ICAL_4ERIS_URL) {
     try {
       await syncIcal();
     } catch (error) {

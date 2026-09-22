@@ -10,10 +10,8 @@ const {
 
 const { GROUP_LABELS } = require("../config");
 
-const { currentDate } = require("../utils/dates");
-
 const {
-  nextCourseDate
+  defaultCourseDate
 } = require("../database/courses.repository");
 
 const {
@@ -25,7 +23,7 @@ function calendarMessage(
   year,
   month,
   publicView = false,
-  selectedDate = nextCourseDate(currentDate())
+  selectedDate = defaultCourseDate(new Date(), group)
 ) {
   // Génération de l'image
   const image = calendarImage(
@@ -56,9 +54,9 @@ function calendarMessage(
     new ButtonBuilder()
       .setCustomId(`cal:switch:${group}:${year}:${month}`)
       .setLabel(
-        group === "alternance"
-          ? "Formation initiale"
-          : "Alternance"
+        group === "4eadl"
+          ? "4ERIS"
+          : "4EADL"
       )
       .setStyle(ButtonStyle.Primary),
 
@@ -93,6 +91,7 @@ function calendarMessage(
 
   return {
     embeds: [embed],
+    attachments: [],
     files: [attachment],
     components: [monthButtons, dayButtons],
 

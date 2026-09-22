@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require("discord.js");
-const { TYPES, LABELS } = require("../config");
+const { TYPES, LABELS, GROUPS, GROUP_LABELS } = require("../config");
 
 const commands = [
 
@@ -14,23 +14,20 @@ const commands = [
     ),
 
   new SlashCommandBuilder()
+    .setName("agenda-refresh")
+    .setDescription("Réimporter les calendriers ICAL et actualiser l'agenda (admin)"),
+
+  new SlashCommandBuilder()
     .setName("agenda-ajouter")
     .setDescription("Ajouter une période au calendrier")
 
     .addStringOption(option =>
       option
         .setName("groupe")
-        .setDescription("Groupe concerné")
+        .setDescription("Groupe concerné (école et entreprise partagés entre 4EADL et 4ERIS)")
         .setRequired(true)
         .addChoices(
-          {
-            name: "Alternance",
-            value: "alternance"
-          },
-          {
-            name: "Formation initiale",
-            value: "initiale"
-          }
+          ...GROUPS.map(group => ({ name: GROUP_LABELS[group], value: group }))
         )
     )
 

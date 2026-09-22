@@ -4,6 +4,7 @@ const { validDate, currentMonth, currentDate } = require("../utils/dates");
 const { nextCourseDate, previousCourseDate } = require("../database/courses.repository");
 const { listEvents, addEvent, deleteEvent, getAgendaMessage, saveAgendaMessage } = require("../database/agenda.repository");
 const { calendarMessage } = require("./messages");
+const { syncIcal } = require("../services/ical.service");
 
 function isAdmin(interaction) {
   const adminRoleId = process.env.ADMIN_ROLE_ID;
@@ -40,10 +41,10 @@ client.on(
           }
           
           const selected =
-            action === "prev" ? previousCourseDate(date) :
-            action === "next" ? nextCourseDate(date) :
+            action === "prev" ? previousCourseDate(date, group) :
+            action === "next" ? nextCourseDate(date, false, group) :
             action === "today" ? currentDate() :
-            action === "tomorrow" ? nextCourseDate(currentDate()) :
+            action === "tomorrow" ? nextCourseDate(currentDate(), false, group) :
             null;
 
           if (!selected) {
@@ -97,9 +98,9 @@ client.on(
         if (action === "switch") {
 
           const other =
-            group === "alternance"
-              ? "initiale"
-              : "alternance";
+            group === "4eadl"
+              ? "4eris"
+              : "4eadl";
 
           return interaction.reply(
             calendarMessage(
@@ -161,7 +162,7 @@ client.on(
 
         return interaction.reply(
           calendarMessage(
-            "alternance",
+            "4eadl",
             year,
             month
           )
@@ -205,7 +206,7 @@ client.on(
 
             await oldMessage.edit(
               calendarMessage(
-                "alternance",
+                "4eadl",
                 year,
                 month,
                 true
@@ -233,7 +234,7 @@ client.on(
         const message =
           await interaction.channel.send(
             calendarMessage(
-              "alternance",
+              "4eadl",
               year,
               month,
               true
@@ -293,6 +294,48 @@ client.on(
       }
 
       // ---------------------------------------------
+      // /agenda-refresh (après la vérification du rôle administrateur)
+      // ---------------------------------------------
+
+      if (name === "agenda-refresh") {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        let count;
+        let importFailed = false;
+        try {
+          count = await syncIcal();
+        } catch (error) {
+          importFailed = true;
+          console.error("Actualisation manuelle ICAL :", error.message);
+        }
+
+        if (!importFailed && count === undefined) {
+          return interaction.editReply(
+            "Une synchronisation est déjà en cours. Réessaie dans quelques instants."
+          );
+        }
+
+        // Même en cas d'échec partiel, afficher les sources déjà mises à jour.
+        let refreshFailed = false;
+        try {
+          const result = await refreshPublicCalendars();
+          refreshFailed = Boolean(result?.failed);
+        } catch (error) {
+          refreshFailed = true;
+          console.error("Actualisation manuelle Discord :", error.message);
+        }
+
+        const importStatus = importFailed
+          ? "Import incomplet : au moins une source n'a pas pu être synchronisée. Ses anciens cours ont été conservés. Consulte les logs du bot."
+          : `${count} cours synchronisés avec succès.`;
+        const displayStatus = refreshFailed
+          ? "Certains calendriers publics n'ont pas pu être actualisés. Vérifie les accès du bot et les logs."
+          : "Calendriers publics actualisés.";
+
+        return interaction.editReply(`${importStatus}\n${displayStatus}`);
+      }
+
+      // ---------------------------------------------
       // /agenda-ajouter
       // ---------------------------------------------
 
@@ -342,7 +385,10 @@ client.on(
 
         await interaction.reply({
           content:
-            `Événement #${result.lastInsertRowid} ajouté.`,
+            `Événement #${result.lastInsertRowid} ajouté.` +
+            (["cours", "entreprise"].includes(type)
+              ? " Cette période est partagée entre 4EADL et 4ERIS."
+              : ""),
           flags: MessageFlags.Ephemeral
         });
 

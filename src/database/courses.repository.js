@@ -1,16 +1,17 @@
 const db = require("./index");
-const { addDays } = require("../utils/dates");
+const { addDays, parisDateTime } = require("../utils/dates");
+const { DEFAULT_GROUP } = require("../config");
 
-function coursesFor(date) {
+function coursesFor(date, group = DEFAULT_GROUP) {
   return db.prepare(`
     SELECT *
     FROM courses
-    WHERE date = ?
+    WHERE date = ? AND groupe = ?
     ORDER BY start_at, uid
-  `).all(date);
+  `).all(date, group);
 }
 
-function nextCourseDate(fromDate, includeToday = false) {
+function nextCourseDate(fromDate, includeToday = false, group = DEFAULT_GROUP) {
   const startDate = includeToday
     ? fromDate
     : addDays(fromDate, 1);
@@ -18,30 +19,44 @@ function nextCourseDate(fromDate, includeToday = false) {
   const next = db.prepare(`
     SELECT MIN(date) AS date
     FROM courses
-    WHERE date >= ?
-  `).get(startDate);
+    WHERE date >= ? AND groupe = ?
+  `).get(startDate, group);
 
   return next?.date || startDate;
 }
 
-function previousCourseDate(date) {
+function previousCourseDate(date, group = DEFAULT_GROUP) {
   return db.prepare(`
     SELECT MAX(date) AS date
     FROM courses
-    WHERE date < ?
-  `).get(date)?.date;
+    WHERE date < ? AND groupe = ?
+  `).get(date, group)?.date;
+}
+
+function defaultCourseDate(now = new Date(), group = DEFAULT_GROUP) {
+  const { date, time } = parisDateTime(now);
+  return nextCourseDate(date, time < "18:00", group);
+}
+
+function courseDatesForMonth(group, year, month) {
+  const start = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+  const end = new Date(Date.UTC(year, month + 1, 1)).toISOString().slice(0, 10);
+  return new Set(db.prepare(`
+    SELECT DISTINCT date FROM courses
+    WHERE groupe = ? AND date >= ? AND date < ?
+  `).all(group, start, end).map(row => row.date));
 }
 
 const upsertCourse = db.prepare(`
   INSERT INTO courses (
-    uid, date, start_at, end_at,
+    groupe, uid, date, start_at, end_at,
     title, location, class_name
   )
   VALUES (
-    @uid, @date, @start_at, @end_at,
+    @groupe, @uid, @date, @start_at, @end_at,
     @title, @location, @class_name
   )
-  ON CONFLICT(uid) DO UPDATE SET
+  ON CONFLICT(groupe, uid) DO UPDATE SET
     date = excluded.date,
     start_at = excluded.start_at,
     end_at = excluded.end_at,
@@ -51,22 +66,22 @@ const upsertCourse = db.prepare(`
 `);
 
 const removeCourse = db.prepare(`
-  DELETE FROM courses WHERE uid = ?
+  DELETE FROM courses WHERE uid = ? AND groupe = ?
 `);
 
 const allCourseUids = db.prepare(`
-  SELECT uid FROM courses
+  SELECT uid FROM courses WHERE groupe = ?
 `);
 
-function replaceCourses(records) {
+function replaceCourses(records, group = DEFAULT_GROUP) {
   db.transaction(() => {
     for (const record of records.values()) {
-      upsertCourse.run(record);
+      upsertCourse.run({ ...record, groupe: group });
     }
 
-    for (const row of allCourseUids.all()) {
+    for (const row of allCourseUids.all(group)) {
       if (!records.has(row.uid)) {
-        removeCourse.run(row.uid);
+        removeCourse.run(row.uid, group);
       }
     }
   })();
@@ -75,6 +90,8 @@ function replaceCourses(records) {
 module.exports = {
   coursesFor,
   nextCourseDate,
+  defaultCourseDate,
+  courseDatesForMonth,
   previousCourseDate,
   replaceCourses
 };

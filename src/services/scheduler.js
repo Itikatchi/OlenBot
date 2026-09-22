@@ -11,13 +11,15 @@ function startScheduler(refreshPublicCalendars) {
     async () => {
       try {
         await syncIcal();
-        await refreshPublicCalendars();
       } catch (error) {
         console.error(
           "Synchronisation de 20 h :",
           error.message
         );
       }
+
+      // Actualiser la date affichée même si le portail ICAL est indisponible.
+      await refreshPublicCalendars().catch(console.error);
     },
     {
       timezone: CONFIG.timezone,
@@ -25,15 +27,22 @@ function startScheduler(refreshPublicCalendars) {
     }
   );
 
-  // Actualisation toutes les heures pour suivre
-  // notamment les changements de mois.
-  const hourlyTimer = setInterval(() => {
-    refreshPublicCalendars().catch(console.error);
-  }, 60 * 60 * 1000);
+  // Heures pleines : bascule à 18 h et changements de jour/mois.
+  // À 20 h, l'import doit se terminer avant de rafraîchir l'image.
+  const hourlyTask = cron.schedule(
+    "0 0-19,21-23 * * *",
+    async () => {
+      await refreshPublicCalendars().catch(console.error);
+    },
+    {
+      timezone: CONFIG.timezone,
+      noOverlap: true
+    }
+  );
 
   return {
     dailyTask,
-    hourlyTimer
+    hourlyTask
   };
 }
 

@@ -14,11 +14,18 @@ function getEvents(group, year, month) {
   return db.prepare(`
     SELECT *
     FROM events
-    WHERE groupe = ?
+    WHERE (
+        groupe = ?
+        OR (
+          ? IN ('4eadl', '4eris')
+          AND groupe IN ('4eadl', '4eris')
+          AND type IN ('cours', 'entreprise')
+        )
+      )
       AND debut < ?
       AND fin >= ?
     ORDER BY debut, id
-  `).all(group, next, start);
+  `).all(group, group, next, start);
 }
 
 function listEvents() {

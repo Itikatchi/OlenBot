@@ -12,6 +12,7 @@ function createPublicCalendarRefresher(client) {
   return async function refreshPublicCalendars() {
     const entries = getAgendaMessages();
     const { year, month } = currentMonth();
+    const result = { refreshed: 0, failed: 0 };
 
     for (const entry of entries) {
       try {
@@ -23,6 +24,7 @@ function createPublicCalendarRefresher(client) {
           !channel?.isTextBased() ||
           !channel.messages?.fetch
         ) {
+          result.failed++;
           console.warn(
             `Calendrier ignoré : salon ${entry.channel_id} inaccessible.`
           );
@@ -30,7 +32,7 @@ function createPublicCalendarRefresher(client) {
         }
 
         const content = calendarMessage(
-          "alternance",
+          "4eadl",
           year,
           month,
           true
@@ -67,13 +69,18 @@ function createPublicCalendarRefresher(client) {
           );
         }
 
+        result.refreshed++;
+
       } catch (error) {
+        result.failed++;
         console.error(
           `Erreur actualisation calendrier (${entry.channel_id}) :`,
           error.message
         );
       }
     }
+
+    return result;
   };
 }
 

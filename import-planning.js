@@ -173,11 +173,11 @@ async function importPlanning() {
     // En cas d'erreur, la transaction est annulée.
 
     const transaction = db.transaction(() => {
-      // Supprime uniquement les anciennes dates alternance
+      // Remplace les périodes 4EADL, y compris l'ancien nom de groupe.
       db.prepare(`
         DELETE FROM events
-        WHERE groupe = ?
-      `).run("alternance");
+        WHERE groupe IN ('4eadl', 'alternance')
+      `).run();
 
       const insert = db.prepare(`
         INSERT INTO events
@@ -187,7 +187,7 @@ async function importPlanning() {
 
       for (const period of periods) {
         insert.run(
-          "alternance",
+          "4eadl",
           period.type,
           period.debut,
           period.fin,
@@ -200,8 +200,8 @@ async function importPlanning() {
 
     console.log("Importation terminée !");
     console.log(`${periods.length} périodes importées.`);
-    console.log("Groupe : alternance");
-    console.log("Formation initiale : inchangée.");
+    console.log("Groupe : 4EADL");
+    console.log("Périodes école/entreprise également visibles pour 4ERIS.");
 
   } finally {
     db.close();

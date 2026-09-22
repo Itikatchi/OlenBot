@@ -2,6 +2,7 @@
 const {
   coursesFor
 } = require("../database/courses.repository");
+const { currentDate } = require("../utils/dates");
 
 function drawDayPanel(ctx, selectedDate, group) {
   const x = 1120;
@@ -18,7 +19,9 @@ function drawDayPanel(ctx, selectedDate, group) {
   ctx.font = "26px AgendaFontBold";
 
   ctx.fillText(
-    "Prochaine journée de cours",
+    selectedDate === currentDate()
+      ? "Cours d'aujourd'hui"
+      : "Journée de cours",
     x + padding,
     y + 43,
     width - padding * 2
@@ -55,21 +58,7 @@ function drawDayPanel(ctx, selectedDate, group) {
     1
   );
 
-  if (group !== "alternance") {
-    ctx.fillStyle = "#D1D6E1";
-    ctx.font = "17px AgendaFont";
-
-    ctx.fillText(
-      "Planning détaillé disponible pour l'alternance.",
-      x + padding,
-      y + 145,
-      width - padding * 2
-    );
-
-    return;
-  }
-
-  const courses = coursesFor(selectedDate);
+  const courses = coursesFor(selectedDate, group);
 
   if (!courses.length) {
     ctx.fillStyle = "#D1D6E1";

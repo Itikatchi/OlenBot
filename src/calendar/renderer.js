@@ -17,7 +17,8 @@ const {
 } = require("../database/agenda.repository");
 
 const {
-  nextCourseDate
+  defaultCourseDate,
+  courseDatesForMonth
 } = require("../database/courses.repository");
 
 const {
@@ -35,7 +36,7 @@ function calendarImage(
   group,
   year,
   month,
-  selectedDate = nextCourseDate(currentDate())
+  selectedDate = defaultCourseDate(new Date(), group)
 ) {
   const canvas = createCanvas(
     CONFIG.width,
@@ -130,6 +131,7 @@ function calendarImage(
   );
 
   const today = currentDate();
+  const courseDates = courseDatesForMonth(group, year, month);
 
   // Dessin des journées
   for (let day = 1; day <= count; day++) {
@@ -178,6 +180,10 @@ function calendarImage(
       event.debut <= date &&
       event.fin >= date
     );
+
+    if (courseDates.has(date) && !active.some(event => event.type === "cours")) {
+      active.unshift({ type: "cours" });
+    }
 
     // Affichage des événements
     active.slice(0, 3).forEach((event, i) => {
